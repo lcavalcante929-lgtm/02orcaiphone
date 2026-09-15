@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orçamento - Dumiro Mecânica</title>
+    <!-- BIBLIOTECAS PARA SUPORTE COMPLETO AO IOS / SAFARI / CHROME MOBILE -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: sans-serif; margin: 0; padding: 0; }
+        body { background: #f0f2f5; padding: 20px; }
+        .card { max-width: 480px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { text-align: center; margin-bottom: 20px; color: #1e3c72; }
+        .campo { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; color: #444; }
+        input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+        input:focus { border-color: #1e3c72; outline: none; }
+        
+        .grupo-peca { background: #f8f9fa; border: 1px solid #ddd; padding: 12px; border-radius: 8px; margin-bottom: 10px; }
+        .linha-inputs { display: flex; gap: 8px; align-items: center; }
+        .peca-nome { flex: 2; }
+        .peca-qtd { flex: 0.6; text-align: center; }
+        .peca-valor { flex: 1.2; }
+        
+        .btn-remover-linha { background: #e74c3c; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .btn-remover-linha:hover { background: #c0392b; }
+        
+        .btn-adicionar { width: 100%; background: #1e3c72; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 5px; margin-bottom: 15px; font-size: 15px; }
+        
+        .total-container { background: #e2e8f0; padding: 18px; text-align: center; border-radius: 6px; font-size: 22px; font-weight: bold; color: #1e3c72; margin: 20px 0; }
+        
+        .botoes-acao { display: flex; flex-direction: column; gap: 10px; }
+        .btn-pdf { width: 100%; padding: 14px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; background-color: #27ae60; color: white; }
+        .btn-pdf:hover { background-color: #219653; }
+        .btn-compartilhar { width: 100%; padding: 14px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; background-color: #25D366; color: white; }
+        .btn-compartilhar:hover { background-color: #1ebc57; }
+
+        /* Oculto por padrão no fluxo normal */
+        #area-pdf-template { display: none; }
+
+        /* Estilo da folha do PDF */
+        .pdf-documento {
+            width: 750px;
+            background: white;
+            padding: 40px;
+            font-family: Arial, sans-serif;
+            color: #333;
+        }
+        .pdf-header { border-bottom: 2px solid #1e3c72; padding-bottom: 15px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+        .oficina-dados { text-align: right; font-size: 13px; line-height: 1.4; color: #555; }
+        .oficina-dados strong { color: #1e3c72; font-size: 18px; letter-spacing: 0.5px; }
+        .pdf-info { margin-bottom: 20px; line-height: 1.6; font-size: 15px; background: #f9f9f9; padding: 15px; border-radius: 6px; }
+        .pdf-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .pdf-table th, .pdf-table td { border: 1px solid #ddd; padding: 12px; text-align: left; font-size: 14px; }
+        .pdf-table th { background-color: #1e3c72; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Nova Ordem de Serviço</h2>
+    
+    <div class="campo">
+        <label>Nome do Cliente</label>
+        <input type="text" id="cliente" placeholder="Ex: João Silva">
+    </div>
+
+    <div class="campo">
+       <label>Placa</label>
+       <input type="text" id="placa" placeholder="Ex: ABC-1D23">
+    </div>
+
+    <div class="campo">
+        <label>Veículo</label>
+        <input type="text" id="veiculo" placeholder="Ex: Honda Civic">
+    </div>
+
+    <div class="campo">
+        <label>Peças / Itens</label>
+        <div id="espaco-das-pecas">
+            <div class="grupo-peca" id="linha-peca-0">
+                <div class="linha-inputs">
+                    <input type="text" class="peca-nome" placeholder="Nome da peça">
+                    <input type="number" class="peca-qtd" value="1" min="1" oninput="somarTudo()">
+                    <input type="text" inputmode="decimal" class="peca-valor" placeholder="Valor R$" oninput="mascaraValor(this)">
+                </div>
+            </div>
+        </div>
+        <button type="button" class="btn-adicionar" onclick="colocarMaisCampos()">➕ Adicionar Outra Peça</button>
+    </div>
+
+    <div class="campo">
+        <label>Valor da Mão de Obra (R$)</label>
+        <input type="text" inputmode="decimal" id="maoObra" placeholder="0,00" oninput="mascaraValor(this)">
+    </div>
+
+    <div class="total-container">
+        Total Geral: R$ <span id="resultado-total">0,00</span>
+    </div>
+
+    <div class="botoes-acao">
+        <button type="button" class="btn-pdf" onclick="gerarPDF()">📄 Baixar Orçamento em PDF</button>
+        <button type="button" class="btn-compartilhar" onclick="compartilharPDF()">📲 Compartilhar Orçamento</button>
+    </div>
+</div>
+
+<!-- MODELO DO PDF -->
+<div id="area-pdf-template">
+    <div class="pdf-documento">
+        <div class="pdf-header">
+            <div>
+                <h1 style="color: #1e3c72; font-size: 26px;">ORÇAMENTO</h1>
+                <p style="font-size: 14px; color: #777;">Documento de Ordem de Serviço</p>
+            </div>
+            <div class="oficina-dados">
+                <strong>DUMIRO MECÂNICA</strong><br>
+                CNPJ: 30.305.177/0001-67<br>
+                Rua Paisandu, Nº 300 - Flor de Maio<br>
+                Telefone: (67) 99896-4406
+            </div>
+        </div>
+        
+        <div class="pdf-info">
+            <p><strong>Cliente:</strong> <span id="pdf-cliente"></span></p>
+            <p><strong>Veículo:</strong> <span id="pdf-veiculo"></span></p>
+            <p><strong>Placa:</strong> <span id="pdf-placa"></span></p>
+            <p><strong>Data de Emissão:</strong> <span id="pdf-data"></span></p>
+        </div>
+
+        <table class="pdf-table">
+            <thead>
+                <tr>
+                    <th>Item / Descrição</th>
+                    <th>Qtd</th>
+                    <th>Vlr Unitário</th>
+                    <th>Total Item</th>
+                </tr>
+            </thead>
+            <tbody id="pdf-tabela-itens"></tbody>
+        </table>
+
+        <div style="text-align: right; font-size: 20px; font-weight: bold; margin-top: 30px; color: #1e3c72; border-top: 2px solid #1e3c72; padding-top: 15px;">
+            VALOR TOTAL: R$ <span id="pdf-total-valor"></span>
+        </div>
+    </div>
+</div>
+
+<script>
+let controleIdLinha = 0;
+
+function mascaraValor(input) {
+    let valor = input.value;
+    valor = valor.replace(/[^\d.,]/g, "");
+    input.value = valor;
+    somarTudo();
+}
+
+function converterParaNumero(texto) {
+    if (!texto) return 0;
+    let limpo = texto.replace(/\./g, "").replace(",", ".");
+    return parseFloat(limpo) || 0;
+}
+
+function formatarMoedaBR(numero) {
+    return numero.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function colocarMaisCampos() {
+    controleIdLinha++;
+    const container = document.getElementById('espaco-das-pecas');
+    const novaPeca = document.createElement('div');
+    novaPeca.className = 'grupo-peca';
+    novaPeca.id = 'linha-peca-' + controleIdLinha;
+
+    novaPeca.innerHTML = '<div class="linha-inputs">' +
+        '<input type="text" class="peca-nome" placeholder="Nome da peça">' +
+        '<input type="number" class="peca-qtd" value="1" min="1" oninput="somarTudo()">' +
+        '<input type="text" inputmode="decimal" class="peca-valor" placeholder="Valor R$" oninput="mascaraValor(this)">' +
+        '<button type="button" class="btn-remover-linha" onclick="removerLinhaEspecifica(' + controleIdLinha + ')">×</button>' +
+        '</div>';
+
+    container.appendChild(novaPeca);
+}
+
+function removerLinhaEspecifica(idDoBloco) {
+    const bloco = document.getElementById('linha-peca-' + idDoBloco);
+    if (bloco) {
+        bloco.remove();
+        somarTudo();
+    }
+}
+
+function somarTudo() {
+    const qtds = document.querySelectorAll('.peca-qtd');
+    const valores = document.querySelectorAll('.peca-valor');
+    let totalPecas = 0;
+
+    for (let i = 0; i < qtds.length; i++) {
+        const qtd = parseFloat(qtds[i].value) || 0;
+        const valor = converterParaNumero(valores[i].value);
+        totalPecas += qtd * valor;
+    }
+
+    const maoObra = converterParaNumero(document.getElementById('maoObra').value);
+    const total = totalPecas + maoObra;
+    
+    document.getElementById('resultado-total').textContent = formatarMoedaBR(total);
+}
+
+function prepararEstruturaPDF() {
+    const cliente = document.getElementById('cliente').value.trim();
+    if (!cliente) {
+        alert('Informe o nome do cliente.');
+        return null;
+    }
+
+    const veiculo = document.getElementById('veiculo').value.trim();
+    const maoObra = converterParaNumero(document.getElementById('maoObra').value);
+
+    document.getElementById('pdf-cliente').textContent = cliente;
+    document.getElementById('pdf-veiculo').textContent = veiculo || 'Não informado';
+    document.getElementById('pdf-placa').textContent = document.getElementById('placa').value.trim() || 'Não informado';
+    document.getElementById('pdf-data').textContent = new Date().toLocaleDateString('pt-BR');
+
+    const tabela = document.getElementById('pdf-tabela-itens');
+    tabela.innerHTML = '';
+
+    const nomes = document.querySelectorAll('.peca-nome');
+    const qtds = document.querySelectorAll('.peca-qtd');
+    const valores = document.querySelectorAll('.peca-valor');
+    let totalPecas = 0;
+
+    for (let i = 0; i < nomes.length; i++) {
+        const nome = nomes[i].value.trim();
+        const qtd = parseFloat(qtds[i].value) || 0;
+        const valor = converterParaNumero(valores[i].value);
+
+        if (nome && valor > 0) {
+            const totalItem = qtd * valor;
+            totalPecas += totalItem;
+
+            const linha = document.createElement('tr');
+            linha.innerHTML = '<td>' + nome + '</td><td>' + qtd + '</td><td>R$ ' + formatarMoedaBR(valor) + '</td><td>R$ ' + formatarMoedaBR(totalItem) + '</td>';
+            tabela.appendChild(linha);
+        }
+    }
+
+    const linhaServico = document.createElement('tr');
+    linhaServico.innerHTML = '<td colspan="3" style="text-align:right;font-weight:bold">Mão de obra</td><td>R$ ' + formatarMoedaBR(maoObra) + '</td>';
+    tabela.appendChild(linhaServico);
+
+    const totalGeral = totalPecas + maoObra;
+    document.getElementById('pdf-total-valor').textContent = formatarMoedaBR(totalGeral);
+
+    return {
+        cliente,
+        totalGeral: formatarMoedaBR(totalGeral),
+        nomeArquivo: 'orcamento_' + cliente.replace(/\s+/g, '_') + '.pdf'
+    };
+}
+
+async function renderizarCanvasPDF() {
+    const template = document.getElementById('area-pdf-template');
+    
+    // Clonar nó para colocar na DOM de forma visível temporariamente
+    const clone = template.cloneNode(true);
+    clone.style.display = 'block';
+    clone.style.position = 'fixed';
+    clone.style.top = '-9999px';
+    clone.style.left = '0';
+    clone.style.width = '750px';
+    document.body.appendChild(clone);
+
+    // Renderizar via html2canvas com suporte iOS
+    const canvas = await html2canvas(clone.querySelector('.pdf-documento'), {
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+    });
+
+    document.body.removeChild(clone);
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+    return pdf;
+}
+
+async function gerarPDF() {
+    const dados = prepararEstruturaPDF();
+    if (!dados) return;
+
+    try {
+        const pdf = await renderizarCanvasPDF();
+        pdf.save(dados.nomeArquivo);
+    } catch (erro) {
+        console.error("Erro ao gerar PDF:", erro);
+        alert("Erro ao gerar o arquivo PDF.");
+    }
+}
+
+async function compartilharPDF() {
+    const dados = prepararEstruturaPDF();
+    if (!dados) return;
+
+    try {
+        const pdf = await renderizarCanvasPDF();
+        const blob = pdf.output('blob');
+        const arquivoPDF = new File([blob], dados.nomeArquivo, { type: 'application/pdf' });
+
+        if (navigator.canShare && navigator.canShare({ files: [arquivoPDF] })) {
+            await navigator.share({
+                title: 'Orçamento Dumiro Mecânica',
+                text: `Olá ${dados.cliente}, segue o orçamento no valor total de R$ ${dados.totalGeral}.`,
+                files: [arquivoPDF]
+            });
+        } else {
+            const textoMensagem = encodeURIComponent(`Olá ${dados.cliente}, segue o seu orçamento no valor total de R$ ${dados.totalGeral}.\n(O arquivo PDF foi baixado no seu dispositivo).`);
+            
+            pdf.save(dados.nomeArquivo);
+            window.open(`https://api.whatsapp.com/send?text=${textoMensagem}`, '_blank');
+        }
+    } catch (erro) {
+        console.error("Erro ao compartilhar PDF:", erro);
+        alert("Erro ao processar o compartilhamento do PDF.");
+    }
+}
+</script>
+
+</body>
+</html>
